@@ -4,6 +4,7 @@ from bs4 import BeautifulSoup
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import math
 
 
 	
@@ -151,6 +152,101 @@ class CommentsFromArticle:
         return comments, more_comments
 
 
+class TestQuestions:
+    ''' Class to convert data to test question format for crowdflower '''
+    def __init__(self, columns = ['_id',
+                 '_pct_missed',
+                 '_judgments',
+                 '_hidden',
+                 '_contention',
+                 '_pct_contested',
+                 '_gold_pool',
+                 '_sentiment_topic',
+                 '_sentiment_comment',
+                 'sentiment_topic_gold',
+                 'sentiment_topic_gold_reason',
+                 'sentiment_comment_gold',
+                 'sentiment_comment_gold_reason',
+                 'body',
+                 'gilded',
+                 'subreddit_id',
+                 'praw_id',
+                 'downs',
+                 'author_name',
+                 'parent_id',
+                 'score',
+                 'subreddit',
+                 'ups',
+                 'id']):
+        self.columns = columns
+        foo = pd.DataFrame(np.zeros(len(columns))).T
+        foo.columns = columns
+        foo = foo.drop(0)
+        self.test_question_df = foo
+
+        pass
+
+    def add_by_id(self, id_list, df, sent_comment, sent_topic = "negative\nneutral\npositive", reason_comment = '', reason_topic = ''):
+        df_new = df[df['id'].apply(lambda x: x in list(id_list))]
+        df_new = self.add_df(df_new, sent_comment = sent_comment)
+        return df_new
+
+    def add_df(self, df, sent_comment, sent_topic = "negative\nneutral\npositive", reason_comment = '', reason_topic = ''):
+        df_new = df
+        df_new['_id'] = 100000000
+        df_new['sentiment_comment_gold'] = sent_comment
+        df_new['sentiment_comment_gold_reason'] = reason_comment
+        df_new['sentiment_topic_gold'] = sent_topic
+        df_new['sentiment_topic_gold_reason'] = reason_topic
+        df_new['_pct_missed'] = ''
+        df_new['_judgments'] = ''
+        df_new['_hidden'] = ''
+        df_new['_contention'] = ''
+        df_new['_pct_contested'] = ''
+        df_new['_gold_pool'] = ''
+        df_new['_sentiment_topic'] = ''
+        df_new['_sentiment_comment'] = ''
+        df_new = df_new[['_id',
+                 '_pct_missed',
+                 '_judgments',
+                 '_hidden',
+                 '_contention',
+                 '_pct_contested',
+                 '_gold_pool',
+                 '_sentiment_topic',
+                 '_sentiment_comment',
+                 'sentiment_topic_gold',
+                 'sentiment_topic_gold_reason',
+                 'sentiment_comment_gold',
+                 'sentiment_comment_gold_reason',
+                 'body',
+                 'gilded',
+                 'subreddit_id',
+                 'praw_id',
+                 'downs',
+                 'author_name',
+                 'parent_id',
+                 'score',
+                 'subreddit',
+                 'ups',
+                 'id']]
+        self.test_question_df = self.test_question_df.append(df_new)
+        return df_new
+
+
+def sub_dummies(df, col, sub = True):
+    dummies = pd.get_dummies(df[col], dummy_na = True)
+    dummies.columns = [str(x) + '_' + col for x in dummies.columns]
+
+    if dummies['nan_' + col].sum() == 0:
+        dummies = dummies.drop('nan_' + col, axis = 1)
+
+
+
+    result = pd.merge(df, dummies, left_index = True, right_index = True)
+    if sub == True:
+        result = result.drop(col, axis = 1)
+    return result
 
 '''
 Important notes
@@ -162,6 +258,6 @@ where x is number, parent_id == name!
 '''
 
 
-
+1
 
 
