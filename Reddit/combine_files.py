@@ -42,8 +42,17 @@ if __name__ == '__main__':
 
     # combine_files(['comments_test.csv','comments_control.csv'], 'combined_comments.csv')
 
-    combine_files(['sub_test.csv','sub_control.csv'], 'combined_sub.csv')
+    # combine_files(['sub_test.csv','sub_control.csv'], 'combined_sub.csv')
     
+    comment_files_test, sub_files_test = get_file_names('/Users/loganduffy/Documents/Idibon/Subreddit_Toxicity/Reddit_Data/new_test0225/')
+    comment_files_test = [i for i in comment_files_test]
+    sub_files_test = [i for i in sub_files_test]
+    print 'comment_files_test', comment_files_test
+    print 'sub_files_test', sub_files_test
+
+    combine_files(comment_files_test, 'comments_test0225.csv')
+    combine_files(sub_files_test, 'sub_test0225.csv')
+
 
 
 
