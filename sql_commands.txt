@@ -1,0 +1,1041 @@
+'body', u'gilded', u'subreddit_id', u'praw_id', u'downs', u'author_name', u'controversiality', u'parent_id', u'score', u'subreddit', u'ups', u'id'
+
+CREATE TABLE comments(
+body text,
+gilded int,
+subreddit_id text,
+praw_id text, 
+downs int,
+author_name text,
+controversiality int,
+parent_id text,
+score int,
+subreddit text,
+ups int,
+id text PRIMARY KEY
+);
+
+CREATE TABLE comments(
+body text,
+gilded int,
+subreddit_id text,
+praw_id text, 
+downs int,
+author_name text,
+controversiality int,
+parent_id text,
+score int,
+subreddit text,
+ups int,
+id text
+);
+
+COPY comments FROM '/Users/loganduffy/Documents/Idibon/Subreddit_Toxicity/Reddit/combined_comments.csv' DELIMITER ',' CSV HEADER;
+
+CREATE TABLE pred1(
+Name text,
+Content text,
+Truncated text,
+Sentiment_Negative1 float,
+Sentiment_Negative3 float,
+Sentiment_Neutral0  float,
+Sentiment_Positive1 float,
+Sentiment_Positive3 float
+);
+
+COPY pred1 FROM '/Users/loganduffy/Documents/Idibon/Subreddit_Toxicity/reddit_pred.csv' DELIMITER ',' CSV HEADER;
+
+COPY user_data FROM '/Users/loganduffy/Documents/Idibon/Edmunds/CarCode/Messages_to_dealers_all_dealer_messages_02162015_ak_has_which_ones_sold_in_categories.csv' DELIMITER ',' CSV HEADER;
+
+SELECT *
+FROM pred1
+WHERE (sentiment_negative3 > .98) AND (sentiment_positive3 < .02)
+LIMIT 10
+
+
+SELECT *
+FROM pred1
+WHERE (sentiment_positive3 > .8) AND (sentiment_negative3 < .02) AND (sentiment_negative1 < .2)
+LIMIT 10
+
+SELECT p.*, c.subreddit
+INTO sent_sub
+FROM pred1 AS p
+INNER JOIN comments AS c
+ON p.name = c.id
+# creates duplicates??? Why?
+
+CREATE TABLE sent_sub_grouped AS
+WITH temp AS (
+SELECT subreddit, AVG(sentiment_negative3) AS avg_neg3, AVG(sentiment_negative1) AS avg_neg1, AVG(sentiment_neutral0) AS avg_neut0, AVG(sentiment_positive1) AS avg_pos1, AVG(sentiment_positive3) AS avg_pos3
+FROM sent_sub
+GROUP BY subreddit
+ORDER BY AVG(sentiment_negative3) DESC
+)
+SELECT *, (-3*avg_neg3) + (-1*avg_neg1) + avg_pos1 + (3*avg_pos3) AS overall_score
+INTO sent_sub_grouped
+FROM temp
+ORDER BY overall_score ASC
+
+FROM temp
+
+SELECT subreddit, AVG(sentiment_negative3) AS avg_neg3, AVG(sentiment_negative1) AS avg_neg1, AVG(sentiment_neutral0) AS avg_neut0, AVG(sentiment_positive1) AS avg_pos1, AVG(sentiment_positive3) AS avg_pos3
+INTO sent_sub_grouped
+FROM sent_sub
+GROUP BY subreddit
+ORDER BY AVG(sentiment_negative3) DESC;
+
+
+
+CREATE TABLE comments_text(
+author text,
+body text,
+controversiality text,
+downs text, 
+gilded text,
+id text PRIMARY KEY,
+parent_id text,
+praw_id text,
+score text,
+subreddit_id text,
+ups text
+);
+
+
+
+CREATE TABLE account(
+	user_id serial PRIMARY KEY,
+	username VARCHAR (50) UNIQUE NOT NULL,
+	password VARCHAR (50) NOT NULL,
+	email VARCHAR (355) UNIQUE NOT NULL,
+	created_on TIMESTAMP NOT NULL,
+	last_login TIMESTAMP
+);
+
+Host *.idibon.com
+    User ben
+    ForwardAgent yes
+    ControlMaster auto
+    ControlPath ~/.ssh/ssh_control_%h_%p_%r
+    ProxyCommand ssh 54.241.118.206 /bin/nc %h %p
+
+
+
+Removing Duplicates
+
+WITH dups AS (
+SELECT *, ROW_NUMBER() OVER(PARTITION BY *) AS count
+FROM comments
+) 
+SELECT *
+FROM dups
+WHERE count > 1
+
+SELECT COUNT(*) FROM (
+SELECT body, gilded, subreddit_id, praw_id, downs, author_name, id, COUNT(gilded)
+FROM comments AS c
+GROUP BY body, gilded, subreddit_id, praw_id, downs, author_name, id
+HAVING COUNT(gilded) > 1
+) a
+
+SELECT COUNT(*) FROM (
+SELECT body, gilded, subreddit_id, praw_id, downs, author_name, parent_id, score, subreddit, ups, id
+FROM comments
+GROUP BY body, gilded, subreddit_id, praw_id, downs, author_name, parent_id, score, subreddit, ups, id
+) a; 
+
+SELECT COUNT(*) FROM (
+SELECT body, gilded, subreddit_id, praw_id, downs, author_name, parent_id, score, subreddit, ups, id, COUNT(*)
+FROM comments
+GROUP BY body, gilded, subreddit_id, praw_id, downs, author_name, parent_id, score, subreddit, ups, id
+HAVING COUNT(*) > 1
+) a; 
+
+WITH id_dups AS (
+SELECT id, COUNT(id) AS cnt
+FROM comments
+GROUP BY id
+HAVING COUNT(id) > 1
+)
+SELECT *
+FROM comments
+WHERE id IN (SELECT id FROM id_dups)
+ORDER BY id
+LIMIT 10;
+
+SELECT id, COUNT(id) AS cnt
+INTO id_dups2
+FROM comments_nodups
+GROUP BY id
+HAVING COUNT(id) > 1
+
+
+# first pass at no dups
+SELECT body, gilded, subreddit_id, praw_id, downs, author_name, parent_id, score, subreddit, ups, id
+INTO comments_nodups1
+FROM comments
+GROUP BY body, gilded, subreddit_id, praw_id, downs, author_name, parent_id, score, subreddit, ups, id
+
+# second pass
+SELECT body, gilded, subreddit_id, praw_id, downs, author_name, parent_id, MIN(score) as score, subreddit, MIN(ups) as ups, id
+INTO comments_nodups
+FROM comments_nodups1
+GROUP BY body, gilded, subreddit_id, praw_id, downs, author_name, parent_id, subreddit, id
+
+SELECT *
+FROM comments_nodups
+WHERE id IN (SELECT id FROM id_dups2)
+ORDER BY id
+LIMIT 10;
+
+### Getting example sentiments
+
+
+#### comments for crowdflower
+SELECT *
+INTO crowdflower022015
+FROM comments_nodups
+WHERE id NOT IN (SELECT id FROM id_dups2)
+
+/Users/loganduffy/Documents/Idibon/Subreddit_Toxicity/reddit_pred.csv
+COPY crowdflower022015 TO '/Users/loganduffy/Documents/Idibon/Subreddit_Toxicity/crowdflower022015.csv' DELIMITER ',' CSV HEADER;
+
+SELECT *
+INTO crowdflower022015_long
+FROM crowdflower022015
+WHERE char_length(body) > 40
+LIMIT 10;
+
+COPY crowdflower022015_long TO '/Users/loganduffy/Documents/Idibon/Subreddit_Toxicity/crowdflower022015_long.csv' DELIMITER ',' CSV HEADER;
+
+SELECT *
+INTO very_high_sent
+FROM sent_sub
+WHERE sentiment_negative1 > .9 OR sentiment_negative3 > .9 OR sentiment_positive1 > .9 OR sentiment_positive3 > .9
+
+SELECT c.*
+INTO crowdflower022015_long_vhsent
+FROM crowdflower022015_long AS c
+INNER JOIN very_high_sent AS v
+ON c.id = v.name
+
+COPY crowdflower022015_long_vhsent TO '/Users/loganduffy/Documents/Idibon/Subreddit_Toxicity/crowdflower022015_long_vhsent.csv' DELIMITER ',' CSV HEADER;
+
+SELECT *
+INTO adj_sent
+FROM sent_sub
+WHERE sentiment_negative1 > .98 OR sentiment_negative3 > .6 OR sentiment_positive1 > .52 OR sentiment_positive3 > .6
+
+SELECT c.*
+INTO crowdflower022015_long_adjsent
+FROM crowdflower022015_long AS c
+INNER JOIN adj_sent AS v
+ON c.id = v.name
+
+COPY crowdflower022015_long_adjsent TO '/Users/loganduffy/Documents/Idibon/Subreddit_Toxicity/crowdflower022015_long_adjsent.csv' DELIMITER ',' CSV HEADER;
+
+./importers/upload.rb csv -c Reddit_Comments_Crowdflower022015 -N id -C body crowdflower022015.csv
+./importers/upload.rb csv -c Reddit_Comments_Crowdflower022015 -N id -C body /home/ben/idibin/crowdflower022015.csv
+
+
+# building full table with sentiment and body
+SELECT c.*, s.sentiment_negative3, s.sentiment_negative1, s.sentiment_neutral0, s.sentiment_positive1, s.sentiment_positive3
+INTO full_cf_sent
+FROM crowdflower022015_long AS c
+INNER JOIN sent_sub AS s
+ON c.id = s.name 
+GROUP BY body, gilded, subreddit_id, praw_id, downs, author_name, parent_id, score, subreddit, ups, id, sentiment_negative3, sentiment_negative1, sentiment_neutral0, sentiment_positive1, sentiment_positive3
+
+
+# adding in rank by subreddit
+SELECT *, rank() OVER (PARTITION BY subreddit ORDER BY sentiment_negative3 DESC) AS n3_rank, rank() OVER (PARTITION BY subreddit ORDER BY sentiment_negative1 DESC) AS n1_rank, rank() OVER (PARTITION BY subreddit ORDER BY sentiment_positive1 DESC) AS p1_rank, rank() OVER (PARTITION BY subreddit ORDER BY sentiment_positive3 DESC) AS p3_rank
+INTO full_cf_sent_ranked
+FROM full_cf_sent;
+
+SELECT COUNT(id) FROM (
+SELECT c.*, s.sentiment_negative3, s.sentiment_negative1, s.sentiment_neutral0, s.sentiment_positive1, s.sentiment_positive3
+FROM crowdflower022015_long AS c
+INNER JOIN sent_sub AS s
+ON c.id = s.name 
+) a
+GROUP BY body, gilded, subreddit_id, praw_id, downs, author_name, parent_id, score, subreddit, ups, id, sentiment_negative3, sentiment_negative1, sentiment_neutral0, sentiment_positive1, sentiment_positive3
+
+SELECT subreddit, COUNT(*) 
+FROM full_cf_sent_ranked
+WHERE p1_rank < 50 OR p3_rank < 50 OR n1_rank < 50 OR n3_rank < 50
+GROUP BY subreddit
+ORDER BY COUNT(*) DESC
+;
+
+# Creating crowdflower table with even dist across subreddits and sentiment
+
+SELECT body, gilded, subreddit_id, praw_id, downs, author_name, parent_id, score, subreddit, ups, id
+INTO crowdflower022215_evendist
+FROM full_cf_sent_ranked
+WHERE p1_rank < 50 OR p3_rank < 50 OR n1_rank < 50 OR n3_rank < 50;
+
+SELECT subreddit, COUNT(*)
+FROM crowdflower022215_evendist
+GROUP BY subreddit
+ORDER BY COUNT(*) DESC
+
+COPY crowdflower022215_evendist TO '/Users/loganduffy/Documents/Idibon/Subreddit_Toxicity/crowdflower022215_evendist.csv' DELIMITER ',' CSV HEADER;
+
+CREATE TABLE subreddit_data(
+subreddit text,
+type text
+);
+
+COPY subreddit_data FROM '/Users/loganduffy/Documents/Idibon/Subreddit_Toxicity/Reddit/subreddit_data.csv' DELIMITER ',' CSV HEADER;
+
+SELECT *, rank() OVER (PARTITION BY subreddit ORDER BY RIGHT(id, 7) DESC) AS rand_rank
+INTO full_cf_sent_ranked_rand
+FROM full_cf_sent_ranked
+
+
+WITH limit_subs AS (
+SELECT *
+FROM full_cf_sent_ranked_rand
+INNER JOIN (
+SELECT *, rank() OVER (PARTITION BY type ORDER BY subreddit)
+FROM subreddit_data
+WHERE rank() OVER (PARTITION BY type ORDER BY subreddit) < 26
+)
+)
+SELECT body, gilded, subreddit_id, praw_id, downs, author_name, parent_id, score, subreddit, ups, id
+INTO crowdflower022315_pilot
+FROM full_cf_sent_ranked_rand
+WHERE p1_rank < 15 OR p3_rank < 15 OR n1_rank < 15 OR n3_rank < 15 OR rand_rank < 25
+
+
+WITH temp AS(
+SELECT *, rank() OVER (PARTITION BY type ORDER BY subreddit) AS rank
+FROM subreddit_data
+),
+limit_subs AS(
+SELECT *
+FROM temp
+WHERE rank < 26
+)
+SELECT body, gilded, subreddit_id, praw_id, downs, author_name, parent_id, score, f.subreddit, ups, id
+INTO crowdflower022315_pilot
+FROM full_cf_sent_ranked_rand AS f
+INNER JOIN limit_subs AS l
+ON f.subreddit = l.subreddit
+WHERE p1_rank < 15 OR p3_rank < 15 OR n1_rank < 15 OR n3_rank < 15 OR rand_rank < 25
+
+WITH temp AS(
+SELECT *, rank() OVER (PARTITION BY type ORDER BY subreddit) AS rank
+FROM subreddit_data
+),
+limit_subs AS(
+SELECT *
+FROM temp
+WHERE rank < 26
+)
+SELECT body, gilded, subreddit_id, praw_id, downs, author_name, parent_id, score, f.subreddit, ups, id
+INTO crowdflower022315_pilot
+FROM full_cf_sent_ranked_rand AS f
+INNER JOIN limit_subs AS l
+ON f.subreddit = l.subreddit
+WHERE p1_rank < 17 OR p3_rank < 17 OR n1_rank < 17 OR n3_rank < 17 OR rand_rank < 25
+
+COPY crowdflower022315_pilot TO '/Users/loganduffy/Documents/Idibon/Subreddit_Toxicity/crowdflower022315_pilot.csv' DELIMITER ',' CSV HEADER;
+
+
+SELECT subreddit, COUNT(*)
+FROM comments_nodups
+GROUP BY subreddit
+ORDER BY COUNT(*)
+
+
+ALTER TABLE subreddit_data ADD COLUMN num_comments int;
+UPDATE subreddit_data AS s
+SET num_comments = c.num_comments
+FROM (
+SELECT subreddit, COUNT(*) AS num_comments
+FROM comments_nodups
+GROUP BY subreddit
+ORDER BY COUNT(*)
+) AS c
+WHERE s.subreddit = c.subreddit;
+
+COPY sent_sub TO '/Users/loganduffy/Documents/Idibon/Subreddit_Toxicity/sent_sub.csv' DELIMITER ',' CSV HEADER;
+
+SELECT subreddit, AVG(CASE WHEN (body LIKE '%thank%') OR ((body LIKE '%Thank%')) THEN 1 ELSE 0 END) as avg_thanks
+FROM comments_nodups
+GROUP BY subreddit
+ORDER BY avg_thanks
+
+SELECT subreddit, AVG(CASE WHEN (LOWER(body) LIKE '%thank%') THEN 1 ELSE 0 END) as avg_thanks
+FROM comments_nodups
+GROUP BY subreddit
+ORDER BY avg_thanks DESC
+
+SELECT subreddit, AVG(CASE WHEN (LOWER(body) LIKE '%nigger%') THEN 1 ELSE 0 END) as avg_thanks
+FROM comments_nodups
+GROUP BY subreddit
+ORDER BY avg_thanks DESC
+
+SELECT subreddit, AVG(CASE WHEN (LOWER(body) LIKE '%nigger%') THEN 1 ELSE 0 END) as avg_thanks
+FROM comments_nodups
+GROUP BY subreddit
+ORDER BY avg_thanks DESC
+
+SELECT *
+FROM crowdflower022015_long
+WHERE LOWER(body) LIKE '%faggot%'
+ORDER BY char_length(body);
+
+toxic
+t1_coo4ndl
+t1_cooanfi
+t1_conm4ak
+t1_cooljcg
+t1_conx9af
+t1_coo9zfk
+t1_coml0dx
+t1_coof2ke
+t1_coogshk
+t1_cooeiys
+t1_coo5dys
+t1_conyy1u
+t1_coo9rcy
+t1_coo5af5
+t1_coo7hht
+t1_coo3j50
+t1_conovoo
+t1_coo0470
+
+supportive:
+t1_cookrsp
+t1_conzd2o
+t1_conaua9
+t1_con6sa7
+t1_conn4d8
+t1_conev0j
+t1_conjlq6
+t1_cony0d7
+
+toxic
+['t1_coo4ndl',
+'t1_cooanfi',
+'t1_conm4ak',
+'t1_cooljcg',
+'t1_conx9af',
+'t1_coo9zfk',
+'t1_coml0dx',
+'t1_coof2ke',
+'t1_coogshk',
+'t1_cooeiys',
+'t1_coo5dys',
+'t1_conyy1u',
+'t1_coo9rcy',
+'t1_coo5af5',
+'t1_coo7hht',
+'t1_coo3j50',
+'t1_conovoo',
+'t1_coo0470']
+
+supportive:
+['t1_cookrsp',
+'t1_conzd2o',
+'t1_conaua9',
+'t1_con6sa7',
+'t1_conn4d8',
+'t1_conev0j',
+'t1_conjlq6',
+'t1_cony0d7']
+
+WITH temp AS(
+SELECT *, rank() OVER (PARTITION BY type ORDER BY subreddit) AS rank
+FROM subreddit_data
+),
+limit_subs AS(
+SELECT *
+FROM temp
+WHERE rank < 16
+)
+SELECT body, gilded, subreddit_id, praw_id, downs, author_name, parent_id, score, f.subreddit, ups, id
+INTO crowdflower022315_pilot_small
+FROM full_cf_sent_ranked_rand AS f
+INNER JOIN limit_subs AS l
+ON f.subreddit = l.subreddit
+WHERE p1_rank < 10 OR p3_rank < 10 OR n1_rank < 10 OR n3_rank < 10 OR rand_rank < 10
+
+WITH temp AS(
+SELECT *, rank() OVER (PARTITION BY type ORDER BY subreddit) AS rank
+FROM subreddit_data
+)
+SELECT *
+FROM temp
+WHERE rank > 15
+
+COPY crowdflower022315_pilot_small TO '/Users/loganduffy/Documents/Idibon/Subreddit_Toxicity/crowdflower022315_pilot_small.csv' DELIMITER ',' CSV HEADER;
+
+
+WITH temp AS(
+SELECT *, rank() OVER (PARTITION BY type ORDER BY subreddit DESC) AS rank
+FROM subreddit_data2
+WHERE num_comments > 628
+),
+limit_subs AS(
+SELECT *
+FROM temp
+WHERE rank < 16
+)
+SELECT body, gilded, subreddit_id, praw_id, downs, author_name, parent_id, score, f.subreddit, ups, id
+INTO crowdflower022315_pilot_small2
+FROM full_cf_sent_ranked_rand AS f
+INNER JOIN limit_subs AS l
+ON f.subreddit = l.subreddit
+WHERE p1_rank < 5 OR p3_rank < 15 OR n1_rank < 5 OR n3_rank < 15 OR rand_rank < 15
+
+COPY crowdflower022315_pilot_small2 TO '/Users/loganduffy/Documents/Idibon/Subreddit_Toxicity/crowdflower022515_pilot_small2.csv' DELIMITER ',' CSV HEADER;
+
+
+WITH temp AS(
+SELECT *, rank() OVER (PARTITION BY type ORDER BY subreddit DESC) AS rank
+FROM subreddit_data2
+WHERE num_comments > 628
+)
+SELECT *
+FROM temp
+WHERE rank < 16
+
+COPY subreddit_data TO '/Users/loganduffy/Documents/Idibon/Subreddit_Toxicity/subreddit_data1.csv' DELIMITER ',' CSV HEADER;
+
+SELECT c.subreddit, s.type, COUNT(s.type) AS num_comments
+FROM crowdflower022315_pilot_small As c
+LEFT JOIN subreddit_data AS s
+ON s.subreddit = c.subreddit
+GROUP BY c.subreddit, s.type
+ORDER BY s.type, COUNT(s.type) DESC
+
+CREATE TABLE subreddit_data2(
+subreddit text,
+type text,
+num_comments int
+);
+
+COPY subreddit_data2 FROM '/Users/loganduffy/Documents/Idibon/Subreddit_Toxicity/subreddit_data1.csv'  DELIMITER ',' CSV HEADER;
+
+______________
+Getting in new data
+
+CREATE TABLE comments0226(
+body text,
+gilded int,
+subreddit_id text,
+praw_id text, 
+downs int,
+author_name text,
+controversiality int,
+parent_id text,
+score int,
+subreddit text,
+ups int,
+id text
+);
+
+COPY comments FROM '/Users/loganduffy/Documents/Idibon/Subreddit_Toxicity/Reddit/combined_comments.csv' DELIMITER ',' CSV HEADER;
+
+CREATE TABLE pred_0226_newtox(
+Name text,
+Content text,
+Truncated text,
+Sentiment_Negative1 float,
+Sentiment_Negative3 float,
+Sentiment_Neutral0  float,
+Sentiment_notrelevant float,
+Sentiment_Positive1 float,
+Sentiment_Positive3 float
+);
+
+COPY pred_0226_newtox FROM '/Users/loganduffy/Documents/Idibon/Subreddit_Toxicity/english_master_sentiment_preds_reddit_0225.csv' DELIMITER ',' CSV HEADER;
+
+___________
+Getting in Large data dump with 250 subreddits
+CREATE TABLE comments_250subs_0227(
+body text,
+gilded int,
+subreddit_id text,
+praw_id text, 
+downs int,
+author_name text,
+controversiality int,
+parent_id text,
+score int,
+subreddit text,
+ups int,
+id text
+);
+
+
+COPY comments_250subs_0227 FROM '/Users/loganduffy/Documents/Idibon/Subreddit_Toxicity/data_0226/comments_0227.csv' DELIMITER ',' CSV HEADER;
+
+CREATE TABLE comments_test0225(
+body text,
+gilded int,
+subreddit_id text,
+praw_id text, 
+downs int,
+author_name text,
+controversiality int,
+parent_id text,
+score int,
+subreddit text,
+ups int,
+id text
+);
+
+COPY comments_test0225 FROM '/Users/loganduffy/Documents/Idibon/Subreddit_Toxicity/Reddit_Data/comments_test0225.csv' DELIMITER ',' CSV HEADER;
+
+### joining tables together
+SELECT *
+INTO comments_joined_250subs_0227 
+FROM comments_250subs_0227
+UNION
+SELECT * 
+FROM comments
+UNION
+SELECT * 
+FROM comments_test0225
+
+
+### removing duplicates and bad rows
+SELECT MIN(body) as body, MAX(gilded), subreddit_id, praw_id, downs, author_name, MIN(controversiality) as controversiality, parent_id, MIN(score) as score, subreddit, MIN(ups) as ups, id
+INTO comments_nodupsjoined_250subs_0227
+FROM comments_joined_250subs_0227
+WHERE (body != '[deleted]') AND (author_name != 'No Data')
+GROUP BY subreddit_id, praw_id, downs, author_name, parent_id, subreddit, id
+
+_____
+DOING SAME THING WITH LVL 3 DATA
+
+CREATE TABLE comments_lvl3_0227(
+body text,
+gilded int,
+subreddit_id text,
+praw_id text, 
+downs int,
+author_name text,
+controversiality int,
+parent_id text,
+score int,
+subreddit text,
+ups int,
+id text
+);
+
+COPY comments_lvl3_0227 FROM '/Users/loganduffy/Documents/Idibon/Subreddit_Toxicity/Reddit_Data/comments_lvl3_0227.csv' DELIMITER ',' CSV HEADER;
+
+SELECT *
+INTO comments_lvl3_joined_0227 
+FROM comments_joined_250subs_0227 
+UNION
+SELECT * 
+FROM comments_lvl3_0227
+
+### removing duplicates and bad rows
+SELECT MIN(body) as body, MAX(gilded), subreddit_id, praw_id, downs, author_name, MIN(controversiality) as controversiality, parent_id, MIN(score) as score, subreddit, MIN(ups) as ups, id
+INTO comments_lvl3_nodupsjoined_0227
+FROM comments_lvl3_joined_0227
+WHERE (body != '[deleted]') AND (author_name != 'No Data')
+GROUP BY subreddit_id, praw_id, downs, author_name, parent_id, subreddit, id
+
+SELECT *
+INTO comments_lvl2_longnodupsjoined_0227
+FROM comments_nodupsjoined_250subs_0227
+WHERE char_length(body) > 40
+
+SELECT *
+INTO comments_lvl3_longnodupsjoined_0227
+FROM comments_lvl3_nodupsjoined_0227
+WHERE char_length(body) > 40
+
+WITH id_dups AS (
+SELECT id, COUNT(id) AS cnt
+FROM comments_lvl3_0227 
+GROUP BY id
+HAVING COUNT(id) > 1
+)
+SELECT *
+FROM comments_lvl3_0227 
+WHERE id IN (SELECT id FROM id_dups)
+ORDER BY id
+LIMIT 10;
+
+COPY comments_lvl3_longnodupsjoined_0227 TO '/Users/loganduffy/Documents/Idibon/Subreddit_Toxicity/Data/comments_lvl3_longnodupsjoined_0227.csv' DELIMITER ',' CSV HEADER;
+
+COPY comments_lvl2_longnodupsjoined_0227 TO '/Users/loganduffy/Documents/Idibon/Subreddit_Toxicity/Data/comments_lvl2_longnodupsjoined_0227.csv' DELIMITER ',' CSV HEADER;
+
+jruby predict.rb csv -c english_master_sentiment -t Sentiment -C body -N id -o /home/jana/english_master_sentiment_preds_reddit_0225.csv
+
+
+_________
+DOING SENTIMENT ANALYSIS
+
+
+jruby predict.rb csv -c english_master_sentiment -t Sentiment -C body -N id -o /home/ben/english_master_sentiment_preds_reddit_lvl2_0227.csv /mnt/idibon.com/projects/reddit/comments_lvl2_longnodupsjoined_0227.csv
+
+jruby predict.rb csv -c english_master_sentiment -t Sentiment -C body -N id -o /home/ben/english_master_sentiment_preds_reddit_lvl3_0227.csv /mnt/idibon.com/projects/reddit/comments_lvl3_longnodupsjoined_0227.csv -e production
+
+CREATE TABLE pred_lvl2_sent_0227(
+Name text,
+Content text,
+Truncated text,
+Sentiment_Negative1 float,
+Sentiment_Negative3 float,
+Sentiment_Neutral0  float,
+Sentiment_notrelevant float,
+Sentiment_Positive1 float,
+Sentiment_Positive3 float
+);
+
+COPY pred_lvl2_sent_0227 FROM '/Users/loganduffy/Documents/Idibon/Subreddit_Toxicity/english_master_sentiment_preds_reddit_lvl2_0227.csv' DELIMITER ',' CSV HEADER;
+
+__________________
+ADDING IN SUBREDDIT DATA
+
+['author', 'title', 'url', 'domain', 'ups', 'upvote_ratio','num_comments', 'gilded', 'subreddit', 'subreddit_id']
+
+?, domain, author, url, num_comments or ups?, title, subreddit_id, subreddit, upvote_ratio, ups, 
+0,i.imgur.com,aquafresca,http://i.imgur.com/AXoUsZO.png,71,/brit/ anon's parents in response to ISIS destroying historical works of art.,t5_2qh4w,4chan,No Data,1658,t3_2xcdec
+
+______
+BRINGING IN 0301 NEW DATA
+CREATE TABLE comments_lvl2_0301(
+body text,
+gilded int,
+subreddit_id text,
+praw_id text, 
+downs int,
+author_name text,
+controversiality int,
+parent_id text,
+score int,
+subreddit text,
+ups int,
+id text
+);
+
+SELECT * 
+INTO comments_lvl2_0301_newcomments
+FROM comments_lvl2_0301
+WHERE id NOT IN (SELECT DISTINCT id FROM comments_joined_250subs_0227)
+
+COPY comments_lvl2_0301 FROM '/Users/loganduffy/Documents/Idibon/Subreddit_Toxicity/Reddit_Data/comments_data_full_0301.csv' DELIMITER ',' CSV HEADER;
+
+SELECT DISTINCT id 
+INTO ids_0227
+FROM comments_joined_250subs_0227
+
+SELECT * 
+INTO comments_lvl2_0301_newcomments
+FROM comments_lvl2_0301
+WHERE id NOT IN (SELECT id FROM ids_0227)
+
+SELECT *
+FROM 
+
+WITH all_ids AS (
+SELECT id, 0 AS old
+FROM comments_lvl2_0301
+UNION
+SELECT id, 1 AS old
+FROM ids_0227
+),
+old_ids AS (
+SELECT id, MAX(old)
+FROM all_ids
+GROUP BY id
+HAVING MAX(old) = 0
+)
+SELECT c.*
+INTO comments_lvl2_0301_newcomments
+FROM comments_lvl2_0301 AS c
+INNER JOIN old_ids AS o
+ON o.id = c.id
+
+SELECT MIN(body) as body, MAX(gilded), subreddit_id, praw_id, downs, author_name, MIN(controversiality) as controversiality, parent_id, MIN(score) as score, subreddit, MIN(ups) as ups, id
+INTO comments_lvl2_0301_newcomments_nodups
+FROM comments_lvl2_0301_newcomments
+WHERE (body != '[deleted]') AND (author_name != 'No Data')
+GROUP BY subreddit_id, praw_id, downs, author_name, parent_id, subreddit, id
+
+SELECT * 
+INTO comments_lvl2_0301_newcomments_longnodups
+FROM comments_lvl2_0301_newcomments_nodups
+WHERE char_length(body) > 40;
+
+COPY comments_lvl2_0301_newcomments_longnodups TO '/Users/loganduffy/Documents/Idibon/Subreddit_Toxicity/Data/comments_lvl2_0301_newcomments_longnodups.csv' DELIMITER ',' CSV HEADER;
+
+
+SELECT *, 301 AS date
+INTO comments_lvl2_0301_newcomments_longjoinednodups
+FROM comments_lvl2_0301_newcomments_nodups
+WHERE char_length(body) > 40
+UNION
+SELECT *, 227 AS date
+FROM comments_lvl2_longnodupsjoined_0227
+
+SELECT DISTINCT subreddit FROM crowdflower022315_pilot_small2;
+
+____
+DOING SENTIMENT ANALYSIS ON 0301 DATA
+jruby predict.rb csv -c english_master_sentiment -t Sentiment -C body -N id -o /home/ben/english_master_sentiment_preds_reddit_lvl2_0301.csv /mnt/idibon.com/projects/reddit/comments_lvl2_0301_newcomments_longnodups.csv -e production
+
+CREATE TABLE pred_lvl2_sent_0301(
+Name text,
+Content text,
+Truncated text,
+Sentiment_Negative1 float,
+Sentiment_Negative3 float,
+Sentiment_Neutral0  float,
+Sentiment_notrelevant float,
+Sentiment_Positive1 float,
+Sentiment_Positive3 float
+);
+
+COPY pred_lvl2_sent_0301 FROM '/Users/loganduffy/Documents/Idibon/Subreddit_Toxicity/english_master_sentiment_preds_reddit_lvl2_0301.csv' DELIMITER ',' CSV HEADER;
+
+SELECT *, 227 AS date
+INTO pred_lvl2_sent_full
+FROM pred_lvl2_sent_0227
+UNION ALL
+SELECT *, 301 AS date
+FROM pred_lvl2_sent_0301
+
+______
+CREATE new sub_data table with subreddit sentiment as well
+
+SELECT c.*, p.truncated, p.sentiment_negative3, p.sentiment_negative1, p.sentiment_neutral0, p.sentiment_notrelevant, p.sentiment_positive1, p.sentiment_positive3, ((3*p.sentiment_positive3) + p.sentiment_positive1 - p.sentiment_negative1 - (3*p.sentiment_negative3)) AS overall_sentiment_score
+INTO full_comment_data_0301
+FROM comments_lvl2_0301_newcomments_longjoinednodups AS c
+LEFT JOIN pred_lvl2_sent_full AS p
+ON p.name = c.id
+
+ALTER TABLE comments_lvl2_0301_newcomments_longjoinednodups RENAME COLUMN max TO gilded
+ALTER TABLE comments_lvl2_0301_newcomments_longnodups RENAME COLUMN max TO gilded
+ALTER TABLE full_comment_data_0301 RENAME COLUMN max TO gilded
+
+WITH subreddit_types AS (
+SELECT DISTINCT f.subreddit, CASE WHEN LOWER(f.subreddit) IN ('gaming','smashbros','sex','soccer','blackpeopletwitter','pcmasterrace','imgoingtohellforthis','atheism','shitredditsays','theredpill','headphones') THEN 'test' ELSE (CASE WHEN s.type IS NULL THEN 'control' ELSE s.type END) END AS type
+FROM full_comment_data_0301 AS f
+LEFT JOIN subreddit_data2 AS s
+ON f.subreddit = s.subreddit
+),
+full_sub AS (
+SELECT subreddit, COUNT(*) AS num_comments, SUM(CASE WHEN date = 227 THEN 1 ELSE 0 END) AS num_comments_227, SUM(CASE WHEN date = 301 THEN 1 ELSE 0 END) AS num_comments_301, AVG(sentiment_negative3) AS avg_sentiment_negative3, AVG(sentiment_negative1) AS avg_sentiment_negative1, AVG(sentiment_neutral0) AS avg_sentiment_neutral0, AVG(sentiment_notrelevant) AS avg_sentiment_notrelevant, AVG(sentiment_positive1) AS avg_sentiment_positive1, AVG(sentiment_positive3) AS avg_sentiment_positive3, AVG(overall_sentiment_score) AS avg_overall_sentiment_score
+FROM full_comment_data_0301
+GROUP BY subreddit
+)
+SELECT f.*, s.type
+INTO full_subreddit_data0301
+FROM full_sub AS f
+LEFT JOIN subreddit_types AS s
+ON f.subreddit = s.subreddit
+ORDER BY s.type, f.avg_overall_sentiment_score ASC
+
+_____
+PUTTING TOGETHER SENTIMENT SCORES AND PILOT RESULTS FOR PREDICTION
+
+WITH ids AS (
+SELECT DISTINCT p.id
+FROM pilot2_results_agg AS p
+INNER JOIN full_comment_data_0301 AS f
+ON p.id = f.id
+)
+SELECT * FROM pilot2_results_agg WHERE id NOT in (SELECT id FROM ids);
+
+SELECT f.*, 
+p._unit_id,
+p._golden,
+p._unit_state,
+p._trusted_judgments,
+p.bigotry,
+p.bigotry_confidence,
+p.directed,
+p.directed_confidence,
+p.sentiment_comment,
+p.sentiment_comment_confidence,
+p.sentiment_topic,
+p.sentiment_topic_confidence,
+p.bigotry_gold,
+p.directed_gold,
+p.sentiment_comment_gold,
+p.sentiment_topic_gold
+INTO full_pilot2_results_data
+FROM pilot2_results_agg AS p
+INNER JOIN full_comment_data_0301 AS f
+ON p.id = f.id
+
+CREATE TABLE pilot2_results_agg (
+_unit_id text,
+_golden text,
+_unit_state text,
+_trusted_judgments text,
+_last_judgment_at text,
+bigotry text,
+bigotry_confidence float,
+directed text,
+directed_confidence float,
+sentiment_comment text,
+sentiment_comment_confidence float,
+sentiment_topic text,
+sentiment_topic_confidence float,
+author_name text,
+bigotry_gold text,
+body text,
+directed_gold text,
+downs text,
+gilded text,
+id text,
+parent_id text,
+praw_id text,
+score text,
+sentiment_comment_gold text,
+sentiment_topic_gold text,
+subreddit text,
+subreddit_id text,
+ups text
+);
+
+
+COPY pilot2_results_agg  FROM '/Users/loganduffy/Documents/Idibon/Subreddit_Toxicity/Results/pilot2_results_agg.csv' DELIMITER ',' CSV HEADER;
+
+
+COPY full_pilot2_results_data TO '/Users/loganduffy/Documents/Idibon/Subreddit_Toxicity/Results/full_pilot2_results_data.csv' DELIMITER ',' CSV HEADER;
+
+COPY full_comment_data_0301 TO '/Users/loganduffy/Documents/Idibon/Subreddit_Toxicity/full_comment_data_0301.csv' DELIMITER ',' CSV HEADER;
+
+
+_____
+PUT TOGETHER FINAL CF DATA, CUT DOWN
+
+
+WITH thousand AS (
+SELECT *, rank() OVER (PARTITION BY subreddit ORDER BY RANDOM() DESC) AS rand
+FROM full_comment_data_0301
+)
+SELECT subreddit, COUNT(*)
+FROM thousand
+WHERE rand < 1000
+GROUP BY subreddit
+ORDER BY COUNT(*) DESC
+
+
+SELECT f.*, rank() OVER (PARTITION BY f.subreddit ORDER BY RANDOM() DESC) AS rand
+INTO top_thousand_rand_0303
+FROM full_comment_data_0301 AS f
+INNER JOIN 
+full_subreddit_data0301 AS s
+ON s.subreddit = f.subreddit
+WHERE s.num_comments > 900
+
+WITH ranked AS (
+SELECT *, rank() OVER (PARTITION BY subreddit ORDER BY sentiment_negative3 DESC) AS n3_rank, rank() OVER (PARTITION BY subreddit ORDER BY sentiment_negative1 DESC) AS n1_rank, rank() OVER (PARTITION BY subreddit ORDER BY sentiment_positive1 DESC) AS p1_rank, rank() OVER (PARTITION BY subreddit ORDER BY sentiment_positive3 DESC) AS p3_rank
+FROM top_thousand_rand_0303
+), 
+top_sent AS (
+SELECT *, rank() OVER (PARTITION BY subreddit ORDER BY RANDOM() DESC) AS rand_2
+FROM ranked
+WHERE (p3_rank < 31) OR (n3_rank < 31)
+), 
+not_top_sent AS (
+SELECT *, rank() OVER (PARTITION BY subreddit ORDER BY RANDOM() DESC) AS rand_2
+FROM ranked
+WHERE (p3_rank > 30) AND (n3_rank > 30)
+)
+SELECT *
+INTO top_100_comments_0303
+FROM top_sent
+UNION
+SELECT *
+FROM not_top_sent
+WHERE rand_2 < 41
+
+COPY full_comment_data_0301 TO '/Users/loganduffy/Documents/Idibon/Subreddit_Toxicity/full_comment_data_0301.csv' DELIMITER ',' CSV HEADER;
+
+
+UNION
+SELECT *
+FROM ranked
+
+SELECT *
+INTO final_cf_data0303
+FROM top_100_comments_0303
+WHERE subreddit IN ('4chan', 'mildlyinteresting', 'cringe', 'tifu', 'videos', 'reactiongifs', 'MapPorn', 'hiphopheads', 'nba', 'woahdude', 'WTF', 'DotA2', 'technology', 'AdviceAnimals', 'gifs', 'GlobalOffensive', 'creepy', 'quityourbullshit', 'LifeProTips', 'nosleep', 'Showerthoughts', 'facepalm', 'TumblrInAction', 'nfl', 'hockey', 'news', 'SubredditDrama', 'PS4', 'canada', 'UpliftingNews', 'fffffffuuuuuuuuuuuu', 'politics', 'pokemon', 'nottheonion', 'aww', 'Jokes', 'Android', 'EarthPorn', 'InternetIsBeautiful', 'Fitness', 'AskReddit', 'Libertarian', 'TrollXChromosomes', 'Drugs', 'movies', 'dataisbeautiful', 'todayilearned', 'polandball', 'announcements', 'DestinyTheGame', 'Games', 'running', 'buildapc', 'changemyview', 'anime', 'sports', 'AskWomen', 'asoiaf', 'OldSchoolCool', 'TrueReddit', 'DIY', 'askscience', 'Guitar', 'IAmA', 'EatCheapAndHealthy', 'photoshopbattles', 'TwoXChromosomes', 'community', 'loseit', 'WritingPrompts', 'gamedev', 'TheRedPill', 'relationships', 'JusticePorn', 'worldnews', 'atheism', 'zen', 'cringepics', 'serialpodcast', 'ImGoingToHellForThis', 'BlackPeopleTwitter', 'opieandanthony', 'justneckbeardthings', 'sex', 'ShitRedditSays', 'smashbros', 'pcmasterrace', 'trees', 'leagueoflegends', 'Parenting', 'funny', 'soccer', 'GetMotivated', 'gaming', 'motorcycles', 'pics', 'Music', 'headphones', 'gamegrumps', 'food', 'MakeupAddiction');
+
+COPY final_cf_data0303 TO '/Users/loganduffy/Documents/Idibon/Subreddit_Toxicity/final_cf_data0303.csv' DELIMITER ',' CSV HEADER;
+
+COPY (
+SELECT *
+FROM final_cf_data0303
+ORDER BY id ASC
+LIMIT 4000
+)
+TO '/Users/loganduffy/Documents/Idibon/Subreddit_Toxicity/final_cf_data0303_4k1.csv' DELIMITER ',' CSV HEADER;
+
+COPY (
+WITH ids AS (
+SELECT *
+FROM final_cf_data0303
+ORDER BY id DESC
+LIMIT 6072
+)
+SELECT *
+FROM ids
+LIMIT 4000
+)
+
+SELECT *
+INTO final_cf_data0303_4k1
+FROM final_cf_data0303
+ORDER BY id ASC
+LIMIT 4000
+
+WITH ids AS (
+SELECT *
+FROM final_cf_data0303
+ORDER BY id DESC
+LIMIT 6072
+)
+SELECT *
+INTO final_cf_data0303_4k2
+FROM ids
+LIMIT 4000
+
+WITH ids AS (
+SELECT *
+FROM final_cf_data0303
+ORDER BY id DESC
+LIMIT 6072
+)
+SELECT *
+INTO final_cf_data0303_4k3
+FROM ids
+ORDER BY id ASC
+LIMIT 2072
+
+WITH together AS (
+SELECT *
+FROM final_cf_data0303_4k1
+UNION ALL
+SELECT *
+FROM final_cf_data0303_4k2
+UNION ALL
+SELECT *
+FROM final_cf_data0303_4k3
+)
+SELECT COUNT(DISTINCT id), COUNT(*)
+FROM together;
+
+
+COPY final_cf_data0303_4k1 TO '/Users/loganduffy/Documents/Idibon/Subreddit_Toxicity/final_cf_data0303_4k1.csv' DELIMITER ',' CSV HEADER;
+
+COPY final_cf_data0303_4k2 TO '/Users/loganduffy/Documents/Idibon/Subreddit_Toxicity/final_cf_data0303_4k2.csv' DELIMITER ',' CSV HEADER;
+
+COPY final_cf_data0303_4k3 TO '/Users/loganduffy/Documents/Idibon/Subreddit_Toxicity/final_cf_data0303_4k3.csv' DELIMITER ',' CSV HEADER;
+
